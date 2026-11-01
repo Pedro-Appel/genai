@@ -28,8 +28,13 @@ machine.
 
 ## Centralizing via symlinks
 
-Move each real skill/rule out of the tool's own directory and into this
-repo, then symlink it back:
+**Status: done for `skills/` → `~/.codex/skills/`** (all 19, migrated
+2026-11-01) — each one was diffed against the live Codex copy to confirm
+no drift, then the real directory was replaced with a symlink into this
+repo. `rules/codex/default.rules` has **not** been symlinked yet — it's
+still a plain file at `~/.codex/rules/default.rules`.
+
+To do the same for anything not migrated yet:
 
 ```sh
 # Codex skills — repeat per skill, or loop over all of skills/*
@@ -49,7 +54,3 @@ ln -s ~/Documents/projects/genai/rules/codex/default.rules ~/.codex/rules/defaul
 After symlinking, edit the files under `~/Documents/projects/genai/`
 (or through the symlink — same inode) and commit from here; the agent
 picks up changes immediately since it's reading through the symlink.
-
-This repo does **not** perform that migration automatically — the steps
-above haven't been run against the live `~/.codex/` config yet. Run them
-yourself, or ask for them to be run, once you're ready to cut over.
