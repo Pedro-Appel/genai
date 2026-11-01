@@ -1,0 +1,189 @@
+---
+name: java-cli-script
+description: Create zero-dependency, single-file executable Java scripts for system-wide use via PATH. Use when asked to create a single-file Java shell script, system utility, PATH-installed Java tool, or shebang-launched Java program without the .java extension. Triggers on "Java script", "Java utility", "PATH script", "system script", or requests for single-file Java programs installed in /usr/local/bin or similar PATH directories. Not for multi-file Java applications — use java-cli-app for those.
+---
+
+Create or maintain a zero-dependency, single-file executable Java script using $ARGUMENTS. Apply all rules below strictly.
+
+## Purpose
+
+These are self-contained, single-file Java scripts installed in a PATH directory (e.g., `/usr/local/bin`) and invoked like any shell command — no project structure, no build tool, no `.java` extension.
+
+## Single-File Constraint
+
+- Everything lives in one file — all logic, records, enums, sealed types, and helper methods
+- If the script grows beyond what fits comfortably in a single file, suggest switching to the `java-cli-app` skill instead
+- No multi-file source-code programs — this skill is strictly for single-file scripts
+
+## Build
+
+- Use Java 25 source-file mode — no build tool, no compilation step
+- Never use the `.java` extension — scripts are executable files with a lowercase filename and a shebang
+- Never use `--enable-preview` in the shebang — Java 25 is a GA release, all features used here are standard
+- The shebang line is always:
+
+```
+#!/usr/bin/env -S java --source 25
+```
+
+- Save with a short, descriptive, lowercase command name (e.g., `jsonformat`, `portcheck`, `sysinfo`)
+- Never use dashes in filenames (e.g., `hello-world`) — Java source-file mode does not support them. Use camelCase instead (e.g., `helloWorld`)
+- Mark executable: `chmod +x scriptname`
+- Install by copying or symlinking to a PATH directory: `cp scriptname /usr/local/bin/` or `ln -s $(pwd)/scriptname /usr/local/bin/scriptname`
+
+## Script Structure
+
+A minimal script:
+
+```
+#!/usr/bin/env -S java --source 25
+
+void main(String... args) throws Exception {
+    // ...
+}
+```
+
+A script with helper methods and records:
+
+```
+#!/usr/bin/env -S java --source 25
+
+record Result(String name, int value) {}
+
+Result process(String input) {
+    // ...
+}
+
+void main(String... args) throws Exception {
+    // ...
+}
+```
+
+## Naming Convention
+
+- The script's filename is its application name — use it consistently in all output: version strings, help text, usage lines, and error messages
+- Derive the application name dynamically at startup using `MethodHandles.lookup().lookupClass().getName()` — in source-file mode, the class name matches the filename, so there is nothing to hardcode or keep in sync
+
+## Version Management
+
+- Suggest maintaining a `String version = "YYYY-MM-DD.N";` instance variable (e.g., `String version = "2026-02-20.1";`)
+- On every change, update the date to the current date and increase the last number
+- Support `-version` flag to print the version
+
+## Main Method Conventions
+
+- Use `void main(String... args) throws Exception` — PATH-installed scripts always accept arguments; declaring `throws Exception` keeps the code clean by avoiding try-catch boilerplate for checked exceptions like `IOException`
+- Instance main only — not static (unnamed classes do not use static methods)
+- Parse arguments manually for simple scripts with few flags
+- For scripts with multiple options or complex argument handling, use the `/zargs` skill to generate an enum-based argument parser — it remains zero-dependency and single-file
+
+## Argument Handling
+
+- Scripts with no additional arguments: print the version when invoked without arguments — no `-help` or `-version` flag needed
+- Scripts with additional arguments: support both `-help` and `-version` flags
+- Use clear, descriptive error messages for invalid input
+- Exit with code 0 on success, non-zero on failure
+
+Script with no additional arguments — just print the version:
+
+```
+String name = MethodHandles.lookup().lookupClass().getName();
+String version = "2026-02-20.1";
+
+void main(String... args) throws Exception {
+    if (args.length == 0) {
+        IO.println(name + " " + version);
+        return;
+    }
+    // ... main logic
+}
+```
+
+Script with additional arguments — include `-help` and `-version`:
+
+```
+String name = MethodHandles.lookup().lookupClass().getName();
+String version = "2026-02-20.1";
+
+void main(String... args) throws Exception {
+    if (args.length == 0 || args[0].equals("-help")) {
+        IO.println("""
+                Usage: %s <input> [options]
+                  -help     Show this help
+                  -version  Show version
+                """.formatted(name));
+        return;
+    }
+    if (args[0].equals("-version")) {
+        IO.println(name + " " + version);
+        return;
+    }
+    // ...
+}
+```
+
+## Zero Dependencies
+
+- Only use the `java.base` module and standard JDK modules
+- Never add external JARs or classpath entries to the shebang
+- Use `java.net.http.HttpClient` for HTTP, `javax.crypto` for crypto, `java.nio.file` for file I/O
+- If a task genuinely requires external libraries or multiple files, suggest using the `java-cli-app` skill with zb instead
+
+## Code Style
+
+- Do not create classes or interfaces — use unnamed classes with top-level methods, records, enums, and sealed types only
+- Code must be as simple, elegant, and understandable as possible
+- Always choose the simplest possible API — prefer higher-level, concise APIs over verbose low-level ones
+- When multiple approaches exist, use the one with the fewest lines of code
+- Use `IO.println()` for printing (or `IO::println` as method reference) — never `System.out.println()`
+- For multi-line output, use a single `IO.println` with a text block — never multiple `IO.println` calls for consecutive lines
+- Use `var` for local variable declarations where the type is obvious
+- Use modern Java features (records, sealed types, pattern matching, etc.) naturally
+- No package declaration
+- Do not import packages from `java.base` — it is automatically available
+- Always use module imports (e.g., `import module java.net.http;`) — never individual type imports
+- Minimal imports — only import what is actually used
+- No blank lines between imports
+- Prefer character literals and named constants over raw numeric literals — write `'\n'` not `10`, define `int ESC = '\033'` instead of inlining `27`
+- Bind behavior to data with functional fields — store a `Runnable`, `Consumer`, or lambda in a record instead of switching on type externally
+- Extract complex boolean conditions into named predicate methods
+- Extract inline lambda predicates into explaining methods and use method references (e.g., `.filter(this::isSkillFile)` over `.filter(p -> p.endsWith("SKILL.md"))`)
+- Extract non-trivial calculations into named methods
+- Inline single-use variables — if a variable is assigned and used only once on the next line, pass the expression directly instead
+- Extract repeated string literals into named constants
+- Separate side effects from conditions — do the work first, then branch on the result. Keep the `if` a pure decision rather than hiding behavior inside the condition
+
+## stdin / stdout / stderr
+
+- Read from stdin when no file argument is given — support piping (e.g., `cat file | scriptname`)
+- Write normal output to stdout
+- Write errors and diagnostics to stderr using `System.err.println()`
+- For colored terminal output (status messages, errors, warnings), use the `/zcl` skill — it adds ANSI color support with zero dependencies
+- Support both piped input and file arguments where applicable
+
+## Configuration (Optional)
+
+- For scripts that need external configuration (properties files, environment overrides), use the `/zcfg` skill to add zero-dependency configuration loading
+- Most scripts should prefer command-line arguments over configuration files — only use `/zcfg` when persistent settings are genuinely needed
+
+## Companion Libraries
+
+The following zero-dependency libraries can be embedded directly into single-file scripts. They may need to be cloned first:
+
+- **zcl** — colored terminal output: `git clone https://github.com/AdamBien/zcl`
+- **zargs** — enum-based argument parsing pattern: https://github.com/AdamBien/zeeds/blob/main/zargs (no repo to clone — the `/zargs` skill generates the code directly)
+- **zcfg** — configuration loading: `git clone https://github.com/AdamBien/zcfg`
+
+## Installation Guidance
+
+When presenting the finished script, always include installation instructions:
+
+```
+# Make executable
+chmod +x scriptname
+
+# Install system-wide (pick one)
+sudo cp scriptname /usr/local/bin/
+# or symlink for development
+sudo ln -s $(pwd)/scriptname /usr/local/bin/scriptname
+```
